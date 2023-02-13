@@ -1,3 +1,5 @@
+# FORKED FROM BELOW
+
 # docker-diffusers-api ("banana-sd-base")
 
 Diffusers / Stable Diffusion in docker with a REST API, supporting various models, pipelines & schedulers.  Used by [kiri.art](https://kiri.art/), perfect for local, server & serverless.
