@@ -70,7 +70,7 @@ RUN if [ "$USE_DREAMBOOTH" = "1" ] ; then apt-get install git-lfs ; fi
 COPY api/ .
 EXPOSE 50150
 
-# Model id, precision, etc.
+# HF Model id, precision, etc.
 ARG MODEL_ID="stabilityai/stable-diffusion-2-1-base"
 ENV MODEL_ID=${MODEL_ID}
 ARG HF_MODEL_ID=""
@@ -80,6 +80,15 @@ ENV MODEL_PRECISION=${MODEL_PRECISION}
 ARG MODEL_REVISION="fp16"
 ENV MODEL_REVISION=${MODEL_REVISION}
 
+# To use a .ckpt file, put the details here.
+ARG CHECKPOINT_URL=""
+ENV CHECKPOINT_URL=${CHECKPOINT_URL}
+ARG CHECKPOINT_CONFIG_URL=""
+ENV CHECKPOINT_CONFIG_URL=${CHECKPOINT_CONFIG_URL}
+
+ARG PIPELINE="ALL"
+ENV PIPELINE=${PIPELINE}
+
 # Download the model
 ENV RUNTIME_DOWNLOADS=0
 RUN python3 download.py
@@ -87,10 +96,11 @@ RUN python3 download.py
 RUN apt update
 RUN apt install -y curl
 RUN curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null && echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | tee /etc/apt/sources.list.d/ngrok.list && apt update && apt install ngrok
-RUN ngrok config add-authtoken 2LVguwogwyeX6wNPhXESjTR5wG6_5VKvNMJDubWRrvwcFiHaA
+RUN ngrok config add-authtoken YOUR_TOKEN_HERE
+ARG NGROK_TUNNEL_EDGE="YOUR_EDGE_HERE"
+ENV NGROK_TUNNEL_EDGE=${NGROK_TUNNEL_EDGE}
 
 ARG SAFETENSORS_FAST_GPU=1
 ENV SAFETENSORS_FAST_GPU=${SAFETENSORS_FAST_GPU}
 
 CMD bash start.sh
-
