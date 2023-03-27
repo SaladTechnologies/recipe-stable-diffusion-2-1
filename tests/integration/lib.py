@@ -302,7 +302,7 @@ def getDDA(
         "gadicc/diffusers-api:test",
         command,
         stream_logs=stream_logs,
-        ports={50150: port},
+        ports={8000: port},
         device_requests=[docker.types.DeviceRequest(count=-1, capabilities=[["gpu"]])],
         environment=environment,
         volumes=root_cache and [f"{HOME}/root-cache:/root/.cache"],

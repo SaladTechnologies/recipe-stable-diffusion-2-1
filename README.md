@@ -1,5 +1,3 @@
-# FORKED FROM BELOW
-
 # docker-diffusers-api ("banana-sd-base")
 
 Diffusers / Stable Diffusion in docker with a REST API, supporting various models, pipelines & schedulers.  Used by [kiri.art](https://kiri.art/), perfect for local, server & serverless.
@@ -236,6 +234,12 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   const signatureIsValid = containerSig === ourSig;
 }
 ```
+
+If you send a callInput called `startRequestId`, it will get sent
+back as part of the send payload in most cases.
+
+You can also set callInputs `SEND_URL` and `SIGN_KEY` to
+set or override these values on a per-request basis.
 
 ## Acknowledgements
 
