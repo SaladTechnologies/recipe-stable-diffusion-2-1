@@ -3,7 +3,6 @@ https://salad.com
 
 # Building your Docker image
 * Configure the Dockerfile file near the end to include your desired model, either via a link in the MODEL_ID section (as in the example), or linking to a .CPKT file instead
-* Configure the docker file to include your NGROK AUTH token, as well as your NGROK EDGE token, in the specified sections near the end of the Dockerfile
 * CD into your working directory
 * Run `docker build -t dockerName .`
 * Once built, run `docker run --gpus=all -p 50150:50150 dockerName`
