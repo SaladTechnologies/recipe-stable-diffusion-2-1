@@ -1,3 +1,48 @@
+FORKED FROM BELOW REPO, DESIGNED FOR SALAD PORTAL AND SALAD SCE
+
+https://salad.com
+Building your Docker image
+
+    Configure the Dockerfile file near the end to include your desired model, either via a link in the MODEL_ID section (as in the example), or linking to a .CPKT file instead
+    CD into your working directory
+    Run docker build -t dockerName .
+    Once built, run docker run --gpus=all -e NGROK_AUTH_TOKEN=[authtokenhere] -e NGROK_TUNNEL_EDGE=[ngroktunnelhere] -p 50150:50150 dockerName
+    Send POST request to http://localhost:50150 to test, using below example POST request:
+
+    {
+    "modelInputs": {
+      "prompt": "YOUR PROMPT GOES HERE!",
+      "num_inference_steps": 50,
+      "guidance_scale": 7.5,
+      "width": 512,
+      "height": 512,
+      "seed": 3239022079,
+      "num_images_per_prompt": 4 
+    },
+    "callInputs": {
+      "PIPELINE": "StableDiffusionPipeline",
+      "SCHEDULER": "LMSDiscreteScheduler",
+      "safety_checker": "true"
+      }
+    }
+
+    Send identical POST request to your designated URL endpoint
+
+Releasing your Docker image
+
+    Once you have a working test Docker built, either push directly to your Docker Repository, or rebuild it with desired tagging and name, and then push your Docker Container to your Docker Repository
+    Create your Salad Portal container group, and use your docker image source
+    Create a key 'NGROK_AUTH_TOKEN' and set it to your NGROK Auth Token
+    Create a key 'NGROK_TUNNEL_EDGE' and set it to your NGROK Tunnel Edge
+
+Changes to below project:
+
+    Added GET request response
+    Included https://github.com/kiri-art/docker-diffusers-api-build-download by default
+    Added configuration for network forwarding with NGROK
+
+
+
 # docker-diffusers-api ("banana-sd-base")
 
 Diffusers / Stable Diffusion in docker with a REST API, supporting various models, pipelines & schedulers.  Used by [kiri.art](https://kiri.art/), perfect for local, server & serverless.
