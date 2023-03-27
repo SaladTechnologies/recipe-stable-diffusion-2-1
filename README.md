@@ -5,7 +5,7 @@ https://salad.com
 * Configure the Dockerfile file near the end to include your desired model, either via a link in the MODEL_ID section (as in the example), or linking to a .CPKT file instead
 * CD into your working directory
 * Run `docker build -t dockerName .`
-* Once built, run `docker run --gpus=all -p 50150:50150 dockerName`
+* Once built, run `docker run --gpus=all -e NGROK_AUTH_TOKEN=[authtokenhere= -e NGROK_TUNNEL_EDGE=[edgetokenhere] -p 50150:50150 dockerName`
 * Send POST request to http://localhost:50150 to test, using below example POST request:
   ```json
   {
