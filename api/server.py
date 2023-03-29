@@ -7,6 +7,7 @@ from sanic import Sanic, response
 import subprocess
 import app as user_src
 import traceback
+import sys
 
 # We do the model load-to-GPU step on server startup
 # so the model object is available globally for reuse
@@ -44,13 +45,21 @@ def inference(request):
     try:
         output = user_src.inference(model_inputs)
     except Exception as err:
-        output = {
-            "$error": {
-                "code": "APP_INFERENCE_ERROR",
-                "name": type(err).__name__,
-                "message": str(err),
-                "stack": traceback.format_exc(),
-            }
+
+        errorStr = str(err)
+
+        if 'CUDA error: unknown error' in errorStr:
+             sys.exit()
+        elif 'torch.cuda.is_available() should be True but is False' in errorStr:
+             sys.exit()
+        else:
+            output = {
+                "$error": {
+                    "code": "APP_INFERENCE_ERROR",
+                    "name": type(err).__name__,
+                    "message": errorStr,
+                    "stack": traceback.format_exc(),
+                }
         }
 
     return response.json(output)

@@ -37,8 +37,9 @@ WORKDIR /api
 ADD requirements.txt requirements.txt
 RUN pip install -r requirements.txt
 
-# [dreambooth] check the low-precision guard before preparing model (#2102)
-RUN git clone https://github.com/huggingface/diffusers && cd diffusers && git checkout 946d1cb200a875f694818be37c9c9f7547e9db45
+# [5e5ce13] adds xformers support to train_unconditional.py (#2520)
+# Also includes LoRA safetensors support.
+RUN git clone https://github.com/huggingface/diffusers && cd diffusers && git checkout 5e5ce13e2f89ac45a0066cb3f369462a3cf1d9ef
 WORKDIR /api
 RUN pip install -e diffusers
 
@@ -67,10 +68,13 @@ RUN if [ "$USE_DREAMBOOTH" = "1" ] ; then \
   fi
 RUN if [ "$USE_DREAMBOOTH" = "1" ] ; then apt-get install git-lfs ; fi
 
+
+
 COPY api/ .
 EXPOSE 50150
 
-# HF Model id, precision, etc.
+
+
 ARG MODEL_ID="stabilityai/stable-diffusion-2-1-base"
 ENV MODEL_ID=${MODEL_ID}
 ARG HF_MODEL_ID=""
@@ -80,27 +84,22 @@ ENV MODEL_PRECISION=${MODEL_PRECISION}
 ARG MODEL_REVISION="fp16"
 ENV MODEL_REVISION=${MODEL_REVISION}
 
-# To use a .ckpt file, put the details here.
-ARG CHECKPOINT_URL=""
-ENV CHECKPOINT_URL=${CHECKPOINT_URL}
-ARG CHECKPOINT_CONFIG_URL=""
-ENV CHECKPOINT_CONFIG_URL=${CHECKPOINT_CONFIG_URL}
 
-ARG PIPELINE="ALL"
-ENV PIPELINE=${PIPELINE}
-
-# Download the model
 ENV RUNTIME_DOWNLOADS=0
 RUN python3 download.py
+
+
+
+
 
 RUN apt update
 RUN apt install -y curl
 RUN curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null && echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | tee /etc/apt/sources.list.d/ngrok.list && apt update && apt install ngrok
-RUN ngrok config add-authtoken YOUR_TOKEN_HERE
-ARG NGROK_TUNNEL_EDGE="YOUR_EDGE_HERE"
-ENV NGROK_TUNNEL_EDGE=${NGROK_TUNNEL_EDGE}
+ENV NGROK_AUTH_TOKEN=$NGROK_AUTH_TOKEN
+ENV NGROK_TUNNEL_EDGE=$NGROK_TUNNEL_EDGE
 
 ARG SAFETENSORS_FAST_GPU=1
 ENV SAFETENSORS_FAST_GPU=${SAFETENSORS_FAST_GPU}
 
 CMD bash start.sh
+

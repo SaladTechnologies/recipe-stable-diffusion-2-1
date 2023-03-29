@@ -21,6 +21,10 @@ from download import download_model, normalize_model_id
 import traceback
 from precision import MODEL_REVISION, MODEL_PRECISION
 from device import device, device_id, device_name
+from diffusers.models.cross_attention import CrossAttnProcessor
+from utils import Storage
+from hashlib import sha256
+
 
 RUNTIME_DOWNLOADS = os.getenv("RUNTIME_DOWNLOADS") == "1"
 USE_DREAMBOOTH = os.getenv("USE_DREAMBOOTH") == "1"
@@ -120,6 +124,8 @@ def truncateInputs(inputs: dict):
 
 
 last_xformers_memory_efficient_attention = {}
+last_attn_procs = None
+
 
 # Inference is ran for every server call
 # Reference your preloaded global model variable here.
@@ -131,6 +137,7 @@ def inference(all_inputs: dict) -> dict:
     global dummy_safety_checker
     global last_xformers_memory_efficient_attention
     global always_normalize_model_id
+    global last_attn_procs
 
     clearSession()
 
@@ -138,6 +145,12 @@ def inference(all_inputs: dict) -> dict:
     model_inputs = all_inputs.get("modelInputs", None)
     call_inputs = all_inputs.get("callInputs", None)
     result = {"$meta": {}}
+
+    send_opts = {}
+    if call_inputs.get("SEND_URL", None):
+        send_opts.update({"SEND_URL": call_inputs.get("SEND_URL")})
+    if call_inputs.get("SIGN_KEY", None):
+        send_opts.update({"SIGN_KEY": call_inputs.get("SIGN_KEY")})
 
     if model_inputs == None or call_inputs == None:
         return {
@@ -184,13 +197,18 @@ def inference(all_inputs: dict) -> dict:
                     checkpoint_config_url=checkpoint_config_url,
                     hf_model_id=hf_model_id,
                     model_precision=model_precision,
+                    send_opts=send_opts,
                 )
                 # downloaded_models.update({normalized_model_id: True})
             clearPipelines()
             if model:
                 model.to("cpu")  # Necessary to avoid a memory leak
             model = loadModel(
-                model_id=normalized_model_id, load=True, precision=model_precision
+                model_id=normalized_model_id,
+                load=True,
+                precision=model_precision,
+                revision=model_revision,
+                send_opts=send_opts,
             )
             last_model_id = normalized_model_id
     else:
@@ -206,7 +224,7 @@ def inference(all_inputs: dict) -> dict:
     if MODEL_ID == "ALL":
         if last_model_id != normalized_model_id:
             clearPipelines()
-            model = loadModel(normalized_model_id)
+            model = loadModel(normalized_model_id, send_opts=send_opts)
             last_model_id = normalized_model_id
     else:
         if model_id != MODEL_ID and not RUNTIME_DOWNLOADS:
@@ -261,6 +279,43 @@ def inference(all_inputs: dict) -> dict:
     is_url = call_inputs.get("is_url", False)
     image_decoder = getFromUrl if is_url else decodeBase64Image
 
+    attn_procs = call_inputs.get("attn_procs", None)
+    if attn_procs is not last_attn_procs:
+        last_attn_procs = attn_procs
+        if attn_procs:
+            storage = Storage(attn_procs, no_raise=True)
+            if storage:
+                hash = sha256(attn_procs.encode("utf-8")).hexdigest()
+                attn_procs_from_safetensors = call_inputs.get(
+                    "attn_procs_from_safetensors", None
+                )
+                fname = storage.url.split("/").pop()
+                if attn_procs_from_safetensors and not re.match(
+                    r".safetensors", attn_procs
+                ):
+                    fname += ".safetensors"
+                if True:
+                    # TODO, way to specify explicit name
+                    path = os.path.join(
+                        MODELS_DIR, "attn_proc--url_" + hash[:7] + "--" + fname
+                    )
+                attn_procs = path
+                if not os.path.exists(path):
+                    storage.download_and_extract(path)
+            print("Load attn_procs " + attn_procs)
+            # Workaround https://github.com/huggingface/diffusers/pull/2448#issuecomment-1453938119
+            if storage and not re.search(r".safetensors", attn_procs):
+                attn_procs = torch.load(attn_procs, map_location="cpu")
+            pipeline.unet.load_attn_procs(attn_procs)
+        else:
+            print("Clearing attn procs")
+            pipeline.unet.set_attn_processor(CrossAttnProcessor())
+
+    # TODO, generalize
+    cross_attention_kwargs = model_inputs.get("cross_attention_kwargs", None)
+    if isinstance(cross_attention_kwargs, str):
+        model_inputs["cross_attention_kwargs"] = json.loads(cross_attention_kwargs)
+
     # Parse out your arguments
     # prompt = model_inputs.get("prompt", None)
     # if prompt == None:
@@ -294,7 +349,7 @@ def inference(all_inputs: dict) -> dict:
             )
         )
 
-    send("inference", "start", {"startRequestId": startRequestId})
+    send("inference", "start", {"startRequestId": startRequestId}, send_opts)
 
     # Run patchmatch for inpainting
     if call_inputs.get("FILL_MODE", None) == "patchmatch":
@@ -348,10 +403,14 @@ def inference(all_inputs: dict) -> dict:
 
         torch.set_grad_enabled(True)
         result = result | TrainDreamBooth(
-            normalized_model_id, pipeline, model_inputs, call_inputs
+            normalized_model_id,
+            pipeline,
+            model_inputs,
+            call_inputs,
+            send_opts=send_opts,
         )
         torch.set_grad_enabled(False)
-        send("inference", "done", {"startRequestId": startRequestId})
+        send("inference", "done", {"startRequestId": startRequestId}, send_opts)
         result.update({"$timings": getTimings()})
         return result
 
@@ -366,6 +425,17 @@ def inference(all_inputs: dict) -> dict:
 
     model_inputs.update({"generator": generator})
 
+    callback = None
+    if model_inputs.get("callback_steps", None):
+
+        def callback(step: int, timestep: int, latents: torch.FloatTensor):
+            send(
+                "inference",
+                "progress",
+                {"startRequestId": startRequestId, "step": step},
+                send_opts,
+            )
+
     with torch.inference_mode():
         try:
             custom_pipeline_method = call_inputs.get("custom_pipeline_method", None)
@@ -377,9 +447,9 @@ def inference(all_inputs: dict) -> dict:
             # still broken in 0.5.1
             elif call_inputs.get("PIPELINE") != "StableDiffusionPipeline":
                 with autocast(device_id):
-                    images = pipeline(**model_inputs).images
+                    images = pipeline(callback=callback, **model_inputs).images
             else:
-                images = pipeline(**model_inputs).images
+                images = pipeline(callback=callback, **model_inputs).images
         except Exception as err:
             return {
                 "$error": {
@@ -396,7 +466,7 @@ def inference(all_inputs: dict) -> dict:
         image.save(buffered, format="PNG")
         images_base64.append(base64.b64encode(buffered.getvalue()).decode("utf-8"))
 
-    send("inference", "done", {"startRequestId": startRequestId})
+    send("inference", "done", {"startRequestId": startRequestId}, send_opts)
 
     # Return the results as a dictionary
     if len(images_base64) > 1:
