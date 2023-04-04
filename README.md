@@ -11,6 +11,7 @@ https://salad.com
   {
   "modelInputs": {
     "prompt": "YOUR PROMPT GOES HERE!",
+    "negative_prompt": "YOUR NEGATIVE PROMPT GOES HERE!",
     "num_inference_steps": 50,
     "guidance_scale": 7.5,
     "width": 512,
